@@ -1,0 +1,23 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented local-only encryption-key placeholder"
+condition = "AND"
+regexTarget = "match"
+paths = ['''^\.env\.example$''']
+regexes = ['''APP_ENCRYPTION_KEY=bG9jYWwtZGV2ZWxvcG1lbnQtZW5jcnlwdGlvbi1rZXk=''']
+
+[[allowlists]]
+description = "Documented local-only HMAC-key placeholder"
+condition = "AND"
+regexTarget = "match"
+paths = ['''^\.env\.example$''']
+regexes = ['''APP_HMAC_KEY=bG9jYWwtZGV2ZWxvcG1lbnQtZW5jcnlwdGlvbi1rZXk=''']
+
+[[allowlists]]
+description = "Documented local-only search-key pepper placeholder"
+condition = "AND"
+regexTarget = "match"
+paths = ['''^\.env\.example$''']
+regexes = ['''SEARCH_KEY_PEPPER=bG9jYWwtZGV2ZWxvcG1lbnQtZW5jcnlwdGlvbi1rZXk=''']

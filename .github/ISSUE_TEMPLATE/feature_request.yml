@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a scoped product improvement.
+title: '[Feature]: '
+labels: ['enhancement', 'needs-triage']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the workflow and evidence without prescribing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and alternatives
+      description: Note affected roles, data, APIs, security boundaries, and alternatives considered.
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Project constraints
+      options:
+        - label: I checked the documented roadmap and non-goals.
+          required: true
+        - label: This request contains no credentials or private data.
+          required: true

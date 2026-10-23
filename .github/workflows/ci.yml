@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    env:
+      DATABASE_URL: postgresql://open_search_console:ci-only@localhost:5432/open_search_console
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm release:source 0.1.0
+
+  integration-and-browser:
+    runs-on: ubuntu-24.04
+    env:
+      ENABLE_RELATIONAL_PROJECTIONS: 'true'
+      HOST_API_PORT: '3301'
+      HOST_WEB_PORT: '3300'
+      APP_ORIGIN: http://localhost:3300
+      NEXT_PUBLIC_API_URL: http://localhost:3301
+      BASE_URL: http://127.0.0.1:3301/api/v1
+      M2_TYPESENSE_API_KEY: local-typesense-admin-key-change-me
+      ALLOW_PRIVATE_TYPESENSE: 'true'
+      ALLOW_INSECURE_TYPESENSE: 'true'
+      ALLOW_PRIVATE_POSTGRES: 'true'
+      ALLOW_INSECURE_POSTGRES: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: cp .env.example .env
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: docker compose --profile test up --detach --build --wait
+      - run: pnpm smoke:m1
+      - run: pnpm smoke:m2
+      - run: pnpm smoke:m3
+      - run: pnpm smoke:m4
+      - run: pnpm smoke:m5
+      - run: pnpm smoke:m6
+      - run: pnpm test:integration:projections
+      - run: pnpm test:e2e
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: failure()
+        run: docker compose --profile test logs --no-color
+      - if: always()
+        run: docker compose --profile test down --volumes --remove-orphans
+
+  migration-and-recovery:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: cp .env.example .env
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm test:migrations
+      - run: pnpm test:restore
+
+  source-security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm security:deps
+      - run: pnpm security:secrets
+      - run: pnpm security:licenses
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: source-security-evidence
+          path: artifacts/security/
+          if-no-files-found: error
+          retention-days: 30
+
+  image-security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cp .env.example .env
+      - run: ./infra/image-security-scan.sh
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-security-evidence
+          path: artifacts/security/
+          if-no-files-found: error
+          retention-days: 30
+
+  compose-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.19.0
+      - run: cp .env.example .env
+      - run: docker compose up --detach --build --wait
+      - run: ./infra/smoke.sh
+      - if: always()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down --volumes
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - checks
+      - integration-and-browser
+      - migration-and-recovery
+      - source-security
+      - image-security
+      - compose-smoke
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build source release assets
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="docs/releases/$version.md"
+          test -f "$notes"
+          ./infra/release-source.sh "$version"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            artifacts/release/indexlume-"$version".tar.gz \
+            artifacts/release/release-manifest.json \
+            artifacts/release/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Indexlume $version" \
+            --notes-file "docs/releases/$version.md" \
+            --verify-tag

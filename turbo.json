@@ -1,0 +1,32 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "API_PORT",
+    "DATABASE_URL",
+    "INTERNAL_API_URL",
+    "NEXT_PUBLIC_API_URL",
+    "NODE_ENV",
+    "REDIS_URL",
+    "TYPESENSE_API_KEY",
+    "TYPESENSE_URL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    }
+  }
+}

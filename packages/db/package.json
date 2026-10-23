@@ -1,0 +1,33 @@
+{
+  "name": "@osc/db",
+  "version": "0.1.0",
+  "description": "Indexlume database schema and client.",
+  "license": "Apache-2.0",
+  "author": "Oryxsol",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:validate": "prisma validate",
+    "lint": "eslint src prisma.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "pg": "8.23.1",
+    "prisma": "7.10.1"
+  },
+  "devDependencies": {
+    "dotenv": "17.2.3"
+  }
+}

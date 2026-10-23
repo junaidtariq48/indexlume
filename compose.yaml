@@ -1,0 +1,213 @@
+name: open-search-console
+
+x-app: &app
+  image: open-search-console-app:local
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: open-search-console-postgres:17.11-bookworm
+    build:
+      context: .
+      dockerfile: infra/postgres.Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  source-postgres:
+    image: open-search-console-postgres:17.11-bookworm
+    build:
+      context: .
+      dockerfile: infra/postgres.Dockerfile
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: connector_fixture
+      POSTGRES_USER: connector_admin
+      POSTGRES_PASSWORD: connector-admin-local
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U connector_admin -d connector_fixture']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - source-postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres-source-init.sql:/docker-entrypoint-initdb.d/01-fixture.sql:ro
+
+  redis:
+    image: redis:8.10.2
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redis-data:/data
+
+  typesense:
+    image: open-search-console-typesense:30.2
+    build:
+      context: .
+      dockerfile: infra/typesense.Dockerfile
+    restart: unless-stopped
+    command:
+      - '--data-dir=/data'
+      - '--api-key=${TYPESENSE_API_KEY}'
+      - '--enable-cors=false'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'bash -ec ''exec 3<>/dev/tcp/127.0.0.1/8108; printf "GET /health HTTP/1.0\r\n\r\n" >&3; read -r status <&3; [[ "$$status" == *" 200 "* ]]''',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - typesense-data:/data
+
+  api:
+    <<: *app
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    command:
+      - /bin/sh
+      - -c
+      - packages/db/node_modules/.bin/prisma migrate deploy --config packages/db/prisma.config.ts && node apps/api/dist/main.js
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      TYPESENSE_URL: ${TYPESENSE_URL}
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+      APP_ENCRYPTION_KEY_PREVIOUS: ${APP_ENCRYPTION_KEY_PREVIOUS:-}
+      APP_HMAC_KEY: ${APP_HMAC_KEY:-}
+      SEARCH_KEY_PEPPER: ${SEARCH_KEY_PEPPER:-}
+      SEARCH_KEY_PEPPER_PREVIOUS: ${SEARCH_KEY_PEPPER_PREVIOUS:-}
+      ALLOW_PRIVATE_TYPESENSE: ${ALLOW_PRIVATE_TYPESENSE:-false}
+      ALLOW_INSECURE_TYPESENSE: ${ALLOW_INSECURE_TYPESENSE:-false}
+      ALLOW_PRIVATE_POSTGRES: ${ALLOW_PRIVATE_POSTGRES:-false}
+      ALLOW_INSECURE_POSTGRES: ${ALLOW_INSECURE_POSTGRES:-false}
+      ENABLE_RELATIONAL_PROJECTIONS: ${ENABLE_RELATIONAL_PROJECTIONS:-true}
+      TYPESENSE_REQUEST_TIMEOUT_MS: ${TYPESENSE_REQUEST_TIMEOUT_MS:-5000}
+      UPLOAD_STAGING_DIR: ${UPLOAD_STAGING_DIR:-/var/lib/osc/uploads}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-25000000}
+      SETUP_TOKEN: ${SETUP_TOKEN}
+      APP_ORIGIN: ${APP_ORIGIN}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-5}
+      LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:-900}
+      PUBLIC_SEARCH_RATE_LIMIT_MAX: ${PUBLIC_SEARCH_RATE_LIMIT_MAX:-120}
+      PUBLIC_SEARCH_RATE_LIMIT_WINDOW_SECONDS: ${PUBLIC_SEARCH_RATE_LIMIT_WINDOW_SECONDS:-60}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - '${HOST_API_PORT:-3001}:3001'
+    volumes:
+      - upload-staging:/var/lib/osc/uploads
+
+  worker:
+    <<: *app
+    command: ['node', 'apps/worker/dist/main.js']
+    environment:
+      NODE_ENV: production
+      REDIS_URL: ${REDIS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+      APP_ENCRYPTION_KEY_PREVIOUS: ${APP_ENCRYPTION_KEY_PREVIOUS:-}
+      APP_HMAC_KEY: ${APP_HMAC_KEY:-}
+      ENABLE_RELATIONAL_PROJECTIONS: ${ENABLE_RELATIONAL_PROJECTIONS:-true}
+      TYPESENSE_REQUEST_TIMEOUT_MS: ${TYPESENSE_REQUEST_TIMEOUT_MS:-5000}
+      UPLOAD_STAGING_DIR: ${UPLOAD_STAGING_DIR:-/var/lib/osc/uploads}
+      INGEST_BATCH_DOCUMENTS: ${INGEST_BATCH_DOCUMENTS:-500}
+      INGEST_BATCH_BYTES: ${INGEST_BATCH_BYTES:-1000000}
+      INGEST_WORKER_CONCURRENCY: ${INGEST_WORKER_CONCURRENCY:-2}
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    volumes:
+      - upload-staging:/var/lib/osc/uploads
+    healthcheck:
+      test: ['CMD', 'node', '-e', 'process.kill(1, 0)']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    <<: *app
+    working_dir: /app/apps/web
+    command:
+      [
+        'node_modules/.bin/next',
+        'start',
+        '--hostname',
+        '0.0.0.0',
+        '--port',
+        '3000',
+      ]
+    environment:
+      NODE_ENV: production
+      INTERNAL_API_URL: ${INTERNAL_API_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - '${HOST_WEB_PORT:-3000}:3000'
+
+volumes:
+  postgres-data:
+  redis-data:
+  typesense-data:
+  upload-staging:
+  source-postgres-data:

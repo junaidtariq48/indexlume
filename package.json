@@ -1,0 +1,64 @@
+{
+  "name": "indexlume",
+  "version": "0.1.0",
+  "description": "Indexlume — Built for developers. Designed for simplicity. Ready to scale.",
+  "license": "Apache-2.0",
+  "author": "Oryxsol",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/junaidtariq48/indexlume.git"
+  },
+  "bugs": {
+    "url": "https://github.com/junaidtariq48/indexlume/issues"
+  },
+  "homepage": "https://github.com/junaidtariq48/indexlume#readme",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=24.15.0 <25",
+    "pnpm": "10.34.5"
+  },
+  "scripts": {
+    "build": "pnpm db:generate && turbo run build",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "pnpm db:generate && turbo run lint",
+    "typecheck": "pnpm db:generate && turbo run typecheck",
+    "test": "pnpm db:generate && turbo run test --concurrency=1",
+    "db:generate": "pnpm --filter @osc/db db:generate",
+    "db:validate": "pnpm --filter @osc/db db:validate",
+    "smoke": "./infra/smoke.sh",
+    "smoke:m1": "node ./infra/m1-smoke.mjs",
+    "smoke:m2": "node ./infra/m2-smoke.mjs",
+    "smoke:m3": "node ./infra/m3-smoke.mjs",
+    "smoke:m4": "node ./infra/m4-smoke.mjs",
+    "smoke:m5": "node ./infra/m5-smoke.mjs",
+    "smoke:m6": "node ./infra/m6-smoke.mjs",
+    "test:integration": "pnpm test:migrations && pnpm test:restore",
+    "test:integration:projections": "node ./infra/m7-relational-integration.mjs",
+    "test:migrations": "./infra/migration-test.sh",
+    "test:restore": "./infra/m7-restore-test.sh",
+    "test:e2e": "playwright test",
+    "crypto:rotate:check": "pnpm --filter @osc/db build && pnpm --filter @osc/ingestion build && node ./infra/rotate-encryption-key.mjs",
+    "crypto:rotate": "pnpm --filter @osc/db build && pnpm --filter @osc/ingestion build && node ./infra/rotate-encryption-key.mjs --apply",
+    "security:deps": "pnpm audit --audit-level=high",
+    "security:secrets": "./infra/secret-scan.sh",
+    "security:licenses": "node ./infra/license-inventory.mjs",
+    "security:images": "./infra/image-security-scan.sh",
+    "security": "pnpm security:deps && pnpm security:secrets && pnpm security:licenses && pnpm security:images",
+    "release:source": "./infra/release-source.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "26.6.5",
+    "eslint": "10.13.0",
+    "prettier": "3.9.10",
+    "turbo": "2.11.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0",
+    "vitest": "5.0.5"
+  }
+}

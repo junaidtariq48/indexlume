@@ -1,0 +1,27 @@
+{
+  "name": "@osc/ingestion",
+  "version": "0.1.0",
+  "description": "Indexlume ingestion and projection primitives.",
+  "license": "Apache-2.0",
+  "author": "Oryxsol",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5"
+  }
+}

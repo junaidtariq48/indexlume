@@ -1,0 +1,9 @@
+.next
+apps/web/next-env.d.ts
+coverage
+dist
+docs
+node_modules
+packages/db/src/generated
+pnpm-lock.yaml
+prompts

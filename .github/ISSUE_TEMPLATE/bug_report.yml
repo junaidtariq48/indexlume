@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a reproducible defect without secrets or private data.
+title: '[Bug]: '
+labels: ['bug', 'needs-triage']
+body:
+  - type: markdown
+    attributes:
+      value: Do not report security vulnerabilities here. Follow SECURITY.md. Remove credentials, queries, records, dumps, and keys.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Host development
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide minimal, deterministic steps using sanitized data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized logs
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, personal data, source records, queries, cookies, tokens, and keys.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

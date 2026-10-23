@@ -1,0 +1,43 @@
+{
+  "name": "@osc/web",
+  "version": "0.1.0",
+  "description": "Indexlume web console.",
+  "license": "Apache-2.0",
+  "author": "Oryxsol",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build --webpack",
+    "dev": "next dev",
+    "lint": "eslint .",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osc/contracts": "workspace:*",
+    "@radix-ui/react-popover": "^1.3.1",
+    "@radix-ui/react-slot": "1.5.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "1.61.0",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "postcss": "8.5.31",
+    "tailwindcss": "4.3.3"
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-arm64-gnu": "16.4.2",
+    "@next/swc-linux-x64-gnu": "16.4.2",
+    "lightningcss-linux-arm64-gnu": "1.32.0",
+    "lightningcss-linux-x64-gnu": "1.32.0"
+  }
+}

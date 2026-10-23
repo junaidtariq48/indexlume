@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.next/
+.turbo/
+coverage/
+dist/
+node_modules/
+packages/db/src/generated/
+playwright-report/
+test-results/
+artifacts/
+*.log
+AGENTS.md

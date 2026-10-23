@@ -1,0 +1,24 @@
+packages:
+  - apps/*
+  - packages/*
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma
+  - unrs-resolver
+
+# Keep the frozen lockfile portable across local macOS development and the
+# Linux amd64/arm64 release images built by CI and downstream operators.
+supportedArchitectures:
+  os:
+    - current
+    - linux
+    - darwin
+  cpu:
+    - current
+    - x64
+    - arm64
+  libc:
+    - current
+    - glibc
+    - musl

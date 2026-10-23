@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.git
+.pnpm-store
+**/.next
+**/.turbo
+**/coverage
+**/dist
+**/node_modules
+packages/db/src/generated
+artifacts
+playwright-report
+test-results

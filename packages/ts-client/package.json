@@ -1,0 +1,35 @@
+{
+  "name": "@osc/ts-client",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Indexlume public search API.",
+  "license": "Apache-2.0",
+  "author": "Oryxsol",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/junaidtariq48/indexlume.git",
+    "directory": "packages/ts-client"
+  },
+  "bugs": {
+    "url": "https://github.com/junaidtariq48/indexlume/issues"
+  },
+  "homepage": "https://github.com/junaidtariq48/indexlume/tree/main/packages/ts-client#readme",
+  "private": false,
+  "type": "module",
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  }
+}

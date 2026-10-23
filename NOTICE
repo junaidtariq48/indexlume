@@ -1,0 +1,11 @@
+Indexlume
+Copyright 2026 Oryxsol
+
+Indexlume's original application code and documentation owned by Oryxsol
+are licensed under the Apache License, Version 2.0.
+
+This distribution also uses independently authored third-party software.
+Those works remain under their respective licenses and copyrights. See
+THIRD_PARTY_NOTICES.md. In particular, Typesense Server is an independent
+GPL-3.0-licensed service; it is not relicensed under Apache-2.0 and is not
+owned by Oryxsol.

@@ -1,0 +1,783 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum TypesenseConnectionMode {
+  BUNDLED
+  EXTERNAL
+}
+
+enum TypesenseTlsPolicy {
+  STRICT
+  ALLOW_INSECURE
+}
+
+enum SearchIndexState {
+  CREATING
+  READY
+  ERROR
+}
+
+enum IndexGenerationState {
+  CREATING
+  ACTIVE
+  SUPERSEDED
+  FAILED
+}
+
+enum DataSourceType {
+  UPLOAD
+  POSTGRES
+}
+
+enum DataSourceState {
+  READY
+  ERROR
+}
+
+enum UploadFormat {
+  CSV
+  JSONL
+}
+
+enum IngestionRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  PARTIAL_FAILED
+  FAILED
+  CANCEL_REQUESTED
+  CANCELLED
+}
+
+enum ProjectionStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  INVALID
+}
+
+enum ProjectionVersionStatus {
+  DRAFT
+  VALIDATED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ProjectionGenerationStatus {
+  QUEUED
+  RUNNING
+  READY_TO_PROMOTE
+  PROMOTING
+  ACTIVE
+  FAILED
+  CANCELLED
+  SUPERSEDED
+}
+
+enum ProjectionWorkStatus {
+  PENDING
+  LEASED
+  COMPLETED
+  FAILED
+}
+
+enum ProjectionReconcileStatus {
+  QUEUED
+  SCANNING
+  COMPLETE
+  AWAITING_CONFIRMATION
+  EXECUTING
+  EXECUTED
+  INVALID
+}
+
+enum ProjectionCandidateState {
+  PROPOSED
+  CONFIRMED
+  EXECUTED
+  INVALID
+}
+
+model User {
+  id                        String                    @id @default(uuid()) @db.Uuid
+  email                     String                    @unique
+  passwordHash              String                    @map("password_hash")
+  status                    UserStatus                @default(ACTIVE)
+  lastLoginAt               DateTime?                 @map("last_login_at")
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @updatedAt @map("updated_at")
+  ownedWorkspaces           Workspace[]               @relation("WorkspaceOwner")
+  memberships               WorkspaceMembership[]
+  sessions                  Session[]
+  auditLogs                 AuditLog[]
+  ingestionRuns             IngestionRun[]
+  createdSources            DataSource[]              @relation("DataSourceCreator")
+  createdProjections        SourceProjection[]        @relation("SourceProjectionCreator")
+  createdProjectionVersions SourceProjectionVersion[] @relation("SourceProjectionVersionCreator")
+  searchPresets             SearchPreset[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @unique @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Workspace {
+  id                   String                @id @default(uuid()) @db.Uuid
+  name                 String
+  slug                 String                @unique
+  ownerUserId          String                @map("owner_user_id") @db.Uuid
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  owner                User                  @relation("WorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  memberships          WorkspaceMembership[]
+  projects             Project[]
+  auditLogs            AuditLog[]
+  typesenseConnections TypesenseConnection[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, workspaceId])
+  @@map("workspace_memberships")
+}
+
+model Project {
+  id                    String               @id @default(uuid()) @db.Uuid
+  publicId              String               @unique @default(uuid()) @map("public_id") @db.Uuid
+  workspaceId           String               @map("workspace_id") @db.Uuid
+  typesenseConnectionId String?              @map("typesense_connection_id") @db.Uuid
+  name                  String
+  slug                  String
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  workspace             Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  typesenseConnection   TypesenseConnection? @relation(fields: [typesenseConnectionId], references: [id], onDelete: SetNull)
+  auditLogs             AuditLog[]
+  searchIndexes         SearchIndex[]
+  dataSources           DataSource[]
+  searchApiKeys         SearchApiKey[]
+  searchMetricBuckets   SearchMetricBucket[]
+  sourceProjections     SourceProjection[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([typesenseConnectionId])
+  @@map("projects")
+}
+
+model TypesenseConnection {
+  id              String                  @id @default(uuid()) @db.Uuid
+  workspaceId     String                  @map("workspace_id") @db.Uuid
+  name            String
+  mode            TypesenseConnectionMode
+  endpoint        String
+  encryptedApiKey String                  @map("encrypted_api_key")
+  tlsPolicy       TypesenseTlsPolicy      @default(STRICT) @map("tls_policy")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  workspace       Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects        Project[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("typesense_connections")
+}
+
+model SearchIndex {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectId           String                  @map("project_id") @db.Uuid
+  sourceId            String?                 @map("source_id") @db.Uuid
+  sourceDatasetId     String?                 @map("source_dataset_id") @db.Uuid
+  name                String
+  slug                String
+  alias               String                  @unique
+  mapping             Json                    @map("mapping_json")
+  searchDefaults      Json                    @default("{}") @map("search_defaults_json")
+  activeGeneration    Int?                    @map("active_generation")
+  state               SearchIndexState        @default(CREATING)
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source              DataSource?             @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  sourceDataset       SourceDataset?          @relation(fields: [sourceDatasetId], references: [id], onDelete: SetNull)
+  generations         IndexGeneration[]
+  ingestionRuns       IngestionRun[]
+  syncCursor          SyncCursor?
+  scheduledSync       ScheduledSync?
+  reconciliations     ReconciliationPreview[]
+  searchMetricBuckets SearchMetricBucket[]
+  presets             SearchPreset[]
+  sourceProjection    SourceProjection?
+
+  @@unique([projectId, slug])
+  @@index([projectId])
+  @@index([sourceId])
+  @@index([sourceDatasetId])
+  @@map("search_indexes")
+}
+
+model SearchApiKey {
+  id                String    @id @default(uuid()) @db.Uuid
+  projectId         String    @map("project_id") @db.Uuid
+  label             String
+  keyPrefix         String    @map("key_prefix")
+  keyHash           String    @unique @map("key_hash")
+  revokedAt         DateTime? @map("revoked_at")
+  lastUsedAt        DateTime? @map("last_used_at")
+  rateLimitOverride Int?      @map("rate_limit_override")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([keyPrefix])
+  @@map("search_api_keys")
+}
+
+model SearchMetricBucket {
+  id             String      @id @default(uuid()) @db.Uuid
+  projectId      String      @map("project_id") @db.Uuid
+  searchIndexId  String      @map("search_index_id") @db.Uuid
+  bucketStart    DateTime    @map("bucket_start")
+  count          Int         @default(0)
+  errorCount     Int         @default(0) @map("error_count")
+  durationSumMs  Int         @default(0) @map("duration_sum_ms")
+  durationLe10   Int         @default(0) @map("duration_le_10")
+  durationLe25   Int         @default(0) @map("duration_le_25")
+  durationLe50   Int         @default(0) @map("duration_le_50")
+  durationLe100  Int         @default(0) @map("duration_le_100")
+  durationLe250  Int         @default(0) @map("duration_le_250")
+  durationLe500  Int         @default(0) @map("duration_le_500")
+  durationLe1000 Int         @default(0) @map("duration_le_1000")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  searchIndex    SearchIndex @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, searchIndexId, bucketStart])
+  @@index([projectId, bucketStart])
+  @@map("search_metric_buckets")
+}
+
+model SearchPreset {
+  id            String      @id @default(uuid()) @db.Uuid
+  searchIndexId String      @map("search_index_id") @db.Uuid
+  name          String
+  settings      Json        @map("settings_json")
+  createdById   String      @map("created_by_id") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  searchIndex   SearchIndex @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+  createdBy     User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([searchIndexId, name])
+  @@index([searchIndexId, createdAt(sort: Desc)])
+  @@map("search_presets")
+}
+
+model IndexGeneration {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  searchIndexId           String                   @map("search_index_id") @db.Uuid
+  generation              Int
+  physicalCollection      String                   @unique @map("physical_collection")
+  state                   IndexGenerationState     @default(CREATING)
+  recordCount             Int                      @default(0) @map("record_count")
+  activatedAt             DateTime?                @map("activated_at")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  searchIndex             SearchIndex              @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+  ingestionRuns           IngestionRun[]
+  projectionGeneration    ProjectionGeneration?
+  projectionReconcileRuns ProjectionReconcileRun[]
+
+  @@unique([searchIndexId, generation])
+  @@index([searchIndexId, createdAt(sort: Desc)])
+  @@map("index_generations")
+}
+
+model DataSource {
+  id              String             @id @default(uuid()) @db.Uuid
+  projectId       String             @map("project_id") @db.Uuid
+  name            String
+  type            DataSourceType     @default(UPLOAD)
+  state           DataSourceState    @default(READY)
+  format          UploadFormat?
+  stagingPath     String?            @map("staging_path")
+  originalName    String?            @map("original_name")
+  sizeBytes       Int?               @map("size_bytes")
+  rowCount        Int?               @map("row_count")
+  schema          Json?              @map("schema_json")
+  encryptedConfig String?            @map("encrypted_config")
+  syncPolicy      Json               @default("{}") @map("sync_policy_json")
+  lastTestedAt    DateTime?          @map("last_tested_at")
+  lastSyncAt      DateTime?          @map("last_sync_at")
+  errorCount      Int                @default(0) @map("error_count")
+  lastError       String?            @map("last_error")
+  createdById     String?            @map("created_by_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User?              @relation("DataSourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  datasets        SourceDataset[]
+  searchIndexes   SearchIndex[]
+  ingestionRuns   IngestionRun[]
+  projections     SourceProjection[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("data_sources")
+}
+
+model SourceDataset {
+  id              String        @id @default(uuid()) @db.Uuid
+  dataSourceId    String        @map("data_source_id") @db.Uuid
+  schemaName      String        @map("schema_name")
+  tableName       String        @map("table_name")
+  primaryKeyField String        @map("primary_key_field")
+  updatedAtField  String        @map("updated_at_field")
+  deletedAtField  String?       @map("deleted_at_field")
+  fieldAllowlist  Json          @map("field_allowlist_json")
+  columnTypes     Json          @map("column_types_json")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  dataSource      DataSource    @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  searchIndexes   SearchIndex[]
+
+  @@unique([dataSourceId, schemaName, tableName])
+  @@index([dataSourceId])
+  @@map("source_datasets")
+}
+
+model SourceProjection {
+  id              String                     @id @default(uuid()) @db.Uuid
+  projectId       String                     @map("project_id") @db.Uuid
+  sourceId        String                     @map("source_id") @db.Uuid
+  searchIndexId   String                     @unique @map("search_index_id") @db.Uuid
+  name            String
+  status          ProjectionStatus           @default(DRAFT)
+  activeVersionId String?                    @unique @map("active_version_id") @db.Uuid
+  draftVersionId  String?                    @unique @map("draft_version_id") @db.Uuid
+  createdById     String                     @map("created_by_id") @db.Uuid
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  updatedAt       DateTime                   @updatedAt @map("updated_at")
+  project         Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source          DataSource                 @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  searchIndex     SearchIndex                @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+  createdBy       User                       @relation("SourceProjectionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  versions        SourceProjectionVersion[]  @relation("ProjectionVersions")
+  activeVersion   SourceProjectionVersion?   @relation("ActiveProjectionVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  draftVersion    SourceProjectionVersion?   @relation("DraftProjectionVersion", fields: [draftVersionId], references: [id], onDelete: SetNull)
+  generations     ProjectionGeneration[]
+  relationCursors RelationScanCursor[]
+  changeEvents    ProjectionChangeEvent[]
+  dirtyRoots      ProjectionDirtyRoot[]
+  dependencyEdges ProjectionDependencyEdge[]
+  documentStates  ProjectionDocumentState[]
+  reconcileRuns   ProjectionReconcileRun[]
+  errors          ProjectionError[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@index([sourceId])
+  @@map("source_projections")
+}
+
+model SourceProjectionVersion {
+  id                String                     @id @default(uuid()) @db.Uuid
+  projectionId      String                     @map("projection_id") @db.Uuid
+  version           Int
+  status            ProjectionVersionStatus    @default(DRAFT)
+  config            Json                       @map("config_json")
+  configHash        String                     @map("config_hash")
+  schemaFingerprint String?                    @map("schema_fingerprint")
+  validation        Json                       @default("{}") @map("validation_json")
+  createdById       String                     @map("created_by_id") @db.Uuid
+  validatedAt       DateTime?                  @map("validated_at")
+  publishedAt       DateTime?                  @map("published_at")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  projection        SourceProjection           @relation("ProjectionVersions", fields: [projectionId], references: [id], onDelete: Cascade)
+  activeFor         SourceProjection?          @relation("ActiveProjectionVersion")
+  draftFor          SourceProjection?          @relation("DraftProjectionVersion")
+  createdBy         User                       @relation("SourceProjectionVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  generations       ProjectionGeneration[]
+  relationCursors   RelationScanCursor[]
+  changeEvents      ProjectionChangeEvent[]
+  dirtyRoots        ProjectionDirtyRoot[]
+  dependencyEdges   ProjectionDependencyEdge[]
+  documentStates    ProjectionDocumentState[]
+  reconcileRuns     ProjectionReconcileRun[]
+  errors            ProjectionError[]
+
+  @@unique([projectionId, version])
+  @@index([projectionId, configHash])
+  @@map("source_projection_versions")
+}
+
+model ProjectionGeneration {
+  id                     String                     @id @default(uuid()) @db.Uuid
+  projectionId           String                     @map("projection_id") @db.Uuid
+  projectionVersionId    String                     @map("projection_version_id") @db.Uuid
+  indexGenerationId      String                     @unique @map("index_generation_id") @db.Uuid
+  status                 ProjectionGenerationStatus @default(QUEUED)
+  idempotencyKey         String                     @unique @map("idempotency_key")
+  fencingToken           BigInt                     @default(0) @map("fencing_token")
+  rootCheckpoint         Json                       @default("{}") @map("root_checkpoint_json")
+  counters               Json                       @default("{}") @map("counters_json")
+  manifestHash           String?                    @map("manifest_hash")
+  snapshotWatermarks     Json                       @default("{}") @map("snapshot_watermarks_json")
+  reconciliationComplete Boolean                    @default(false) @map("reconciliation_complete")
+  errorCode              String?                    @map("error_code")
+  startedAt              DateTime?                  @map("started_at")
+  completedAt            DateTime?                  @map("completed_at")
+  createdAt              DateTime                   @default(now()) @map("created_at")
+  updatedAt              DateTime                   @updatedAt @map("updated_at")
+  projection             SourceProjection           @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion      SourceProjectionVersion    @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+  indexGeneration        IndexGeneration            @relation(fields: [indexGenerationId], references: [id], onDelete: Cascade)
+  documentStates         ProjectionDocumentState[]
+  reconcileRuns          ProjectionReconcileRun[]
+  errors                 ProjectionError[]
+
+  @@index([projectionId, createdAt(sort: Desc)])
+  @@index([projectionVersionId])
+  @@index([status, createdAt])
+  @@map("projection_generations")
+}
+
+model RelationScanCursor {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectionId        String                  @map("projection_id") @db.Uuid
+  projectionVersionId String                  @map("projection_version_id") @db.Uuid
+  relationId          String                  @map("relation_id")
+  cursorTime          DateTime?               @map("cursor_time")
+  cursorTuple         Json                    @default("[]") @map("cursor_tuple_json")
+  overlapSeconds      Int                     @default(2) @map("overlap_seconds")
+  checkpointVersion   BigInt                  @default(0) @map("checkpoint_version")
+  completedAt         DateTime?               @map("completed_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  projection          SourceProjection        @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion   SourceProjectionVersion @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([projectionId, projectionVersionId, relationId], map: "relation_scan_cursors_projection_id_projection_version_id_relat")
+  @@index([projectionVersionId])
+  @@map("relation_scan_cursors")
+}
+
+model ProjectionChangeEvent {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  projectionId          String                  @map("projection_id") @db.Uuid
+  projectionVersionId   String                  @map("projection_version_id") @db.Uuid
+  relationId            String                  @map("relation_id")
+  relationKeyHmac       String                  @map("relation_key_hmac")
+  relationKeyCiphertext String                  @map("relation_key_ciphertext")
+  dedupeKey             String                  @unique @map("dedupe_key")
+  status                ProjectionWorkStatus    @default(PENDING)
+  occurredAt            DateTime?               @map("occurred_at")
+  processedAt           DateTime?               @map("processed_at")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  projection            SourceProjection        @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion     SourceProjectionVersion @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+
+  @@index([projectionId, status, createdAt])
+  @@index([projectionVersionId, relationId, relationKeyHmac], map: "projection_change_events_projection_version_relation_key_idx")
+  @@map("projection_change_events")
+}
+
+model ProjectionDirtyRoot {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectionId        String                  @map("projection_id") @db.Uuid
+  projectionVersionId String                  @map("projection_version_id") @db.Uuid
+  rootKeyHmac         String                  @map("root_key_hmac")
+  rootKeyCiphertext   String                  @map("root_key_ciphertext")
+  reason              String
+  status              ProjectionWorkStatus    @default(PENDING)
+  attempts            Int                     @default(0)
+  priority            Int                     @default(0)
+  leaseUntil          DateTime?               @map("lease_until")
+  fencingToken        BigInt                  @default(0) @map("fencing_token")
+  lastErrorCode       String?                 @map("last_error_code")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  projection          SourceProjection        @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion   SourceProjectionVersion @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([projectionId, projectionVersionId, rootKeyHmac], map: "projection_dirty_roots_projection_version_root_key")
+  @@index([projectionId, status, priority, createdAt], map: "projection_dirty_roots_projection_status_priority_idx")
+  @@map("projection_dirty_roots")
+}
+
+model ProjectionDependencyEdge {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectionId        String                  @map("projection_id") @db.Uuid
+  projectionVersionId String                  @map("projection_version_id") @db.Uuid
+  relationId          String                  @map("relation_id")
+  relatedKeyHmac      String                  @map("related_key_hmac")
+  rootKeyHmac         String                  @map("root_key_hmac")
+  rootKeyCiphertext   String                  @map("root_key_ciphertext")
+  firstSeenGeneration Int                     @map("first_seen_generation")
+  lastSeenGeneration  Int                     @map("last_seen_generation")
+  removedAt           DateTime?               @map("removed_at")
+  retainUntil         DateTime?               @map("retain_until")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  projection          SourceProjection        @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion   SourceProjectionVersion @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([projectionId, projectionVersionId, relationId, relatedKeyHmac, rootKeyHmac], map: "projection_dependency_edges_identity_key")
+  @@index([projectionId, projectionVersionId, relationId, relatedKeyHmac], map: "projection_dependency_edges_related_idx")
+  @@index([projectionId, rootKeyHmac])
+  @@map("projection_dependency_edges")
+}
+
+model ProjectionDocumentState {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectionId        String                  @map("projection_id") @db.Uuid
+  projectionVersionId String                  @map("projection_version_id") @db.Uuid
+  rootKeyHmac         String                  @map("root_key_hmac")
+  rootKeyCiphertext   String                  @map("root_key_ciphertext")
+  documentId          String                  @map("document_id")
+  canonicalHash       String                  @map("canonical_hash")
+  activeGenerationId  String?                 @map("active_generation_id") @db.Uuid
+  terminalState       String                  @map("terminal_state")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  projection          SourceProjection        @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion   SourceProjectionVersion @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+  activeGeneration    ProjectionGeneration?   @relation(fields: [activeGenerationId], references: [id], onDelete: SetNull)
+
+  @@unique([projectionId, projectionVersionId, rootKeyHmac], map: "projection_document_states_root_key")
+  @@unique([projectionId, projectionVersionId, documentId], map: "projection_document_states_document_key")
+  @@index([activeGenerationId])
+  @@map("projection_document_states")
+}
+
+model ProjectionReconcileRun {
+  id                      String                         @id @default(uuid()) @db.Uuid
+  projectionId            String                         @map("projection_id") @db.Uuid
+  projectionVersionId     String                         @map("projection_version_id") @db.Uuid
+  projectionGenerationId  String?                        @map("projection_generation_id") @db.Uuid
+  activeIndexGenerationId String                         @map("active_index_generation_id") @db.Uuid
+  status                  ProjectionReconcileStatus      @default(QUEUED)
+  scanStartedAt           DateTime?                      @map("scan_started_at")
+  scanEndedAt             DateTime?                      @map("scan_ended_at")
+  complete                Boolean                        @default(false)
+  schemaFingerprint       String                         @map("schema_fingerprint")
+  manifestDigest          String?                        @map("manifest_digest")
+  candidateSetDigest      String?                        @map("candidate_set_digest")
+  expectedCount           Int                            @default(0) @map("expected_count")
+  rootCount               Int                            @default(0) @map("root_count")
+  tokenHash               String?                        @unique @map("token_hash")
+  expiresAt               DateTime?                      @map("expires_at")
+  executedAt              DateTime?                      @map("executed_at")
+  invalidReason           String?                        @map("invalid_reason")
+  createdAt               DateTime                       @default(now()) @map("created_at")
+  updatedAt               DateTime                       @updatedAt @map("updated_at")
+  projection              SourceProjection               @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion       SourceProjectionVersion        @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+  projectionGeneration    ProjectionGeneration?          @relation(fields: [projectionGenerationId], references: [id], onDelete: SetNull)
+  activeIndexGeneration   IndexGeneration                @relation(fields: [activeIndexGenerationId], references: [id], onDelete: Restrict)
+  candidates              ProjectionReconcileCandidate[]
+
+  @@index([projectionId, createdAt(sort: Desc)])
+  @@index([projectionVersionId, status])
+  @@index([activeIndexGenerationId])
+  @@map("projection_reconcile_runs")
+}
+
+model ProjectionReconcileCandidate {
+  id                String                   @id @default(uuid()) @db.Uuid
+  reconcileRunId    String                   @map("reconcile_run_id") @db.Uuid
+  rootKeyHmac       String                   @map("root_key_hmac")
+  rootKeyCiphertext String                   @map("root_key_ciphertext")
+  documentId        String                   @map("document_id")
+  reason            String
+  state             ProjectionCandidateState @default(PROPOSED)
+  executedAt        DateTime?                @map("executed_at")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  reconcileRun      ProjectionReconcileRun   @relation(fields: [reconcileRunId], references: [id], onDelete: Cascade)
+
+  @@unique([reconcileRunId, rootKeyHmac], map: "projection_reconcile_candidates_reconcile_run_root_key")
+  @@index([reconcileRunId, state])
+  @@map("projection_reconcile_candidates")
+}
+
+model ProjectionError {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  projectionId           String                  @map("projection_id") @db.Uuid
+  projectionVersionId    String                  @map("projection_version_id") @db.Uuid
+  projectionGenerationId String?                 @map("projection_generation_id") @db.Uuid
+  code                   String
+  sanitizedMessage       String                  @map("sanitized_message")
+  entityHmac             String?                 @map("entity_hmac")
+  retryable              Boolean                 @default(false)
+  createdAt              DateTime                @default(now()) @map("created_at")
+  projection             SourceProjection        @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  projectionVersion      SourceProjectionVersion @relation(fields: [projectionVersionId], references: [id], onDelete: Cascade)
+  projectionGeneration   ProjectionGeneration?   @relation(fields: [projectionGenerationId], references: [id], onDelete: SetNull)
+
+  @@index([projectionId, createdAt(sort: Desc)])
+  @@index([projectionGenerationId])
+  @@map("projection_errors")
+}
+
+model SyncCursor {
+  id              String      @id @default(uuid()) @db.Uuid
+  searchIndexId   String      @unique @map("search_index_id") @db.Uuid
+  value           Json        @default("{}") @map("value_json")
+  lastSuccessAt   DateTime?   @map("last_success_at")
+  lastReconcileAt DateTime?   @map("last_reconcile_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  searchIndex     SearchIndex @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+
+  @@map("sync_cursors")
+}
+
+model ScheduledSync {
+  id              String      @id @default(uuid()) @db.Uuid
+  searchIndexId   String      @unique @map("search_index_id") @db.Uuid
+  intervalMinutes Int         @map("interval_minutes")
+  enabled         Boolean     @default(true)
+  nextRunAt       DateTime    @map("next_run_at")
+  lastQueuedAt    DateTime?   @map("last_queued_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  searchIndex     SearchIndex @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, nextRunAt])
+  @@map("scheduled_syncs")
+}
+
+model ReconciliationPreview {
+  id            String      @id @default(uuid()) @db.Uuid
+  searchIndexId String      @map("search_index_id") @db.Uuid
+  tokenHash     String      @unique @map("token_hash")
+  missingIds    Json        @default("[]") @map("missing_ids_json")
+  sourceCount   Int         @default(0) @map("source_count")
+  indexedCount  Int         @default(0) @map("indexed_count")
+  complete      Boolean     @default(false)
+  expiresAt     DateTime    @map("expires_at")
+  executedAt    DateTime?   @map("executed_at")
+  failureReason String?     @map("failure_reason")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  searchIndex   SearchIndex @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+
+  @@index([searchIndexId, createdAt(sort: Desc)])
+  @@map("reconciliation_previews")
+}
+
+model IngestionRun {
+  id            String             @id @default(uuid()) @db.Uuid
+  searchIndexId String             @map("search_index_id") @db.Uuid
+  generationId  String?            @map("generation_id") @db.Uuid
+  sourceId      String             @map("source_id") @db.Uuid
+  triggeredById String?            @map("triggered_by_id") @db.Uuid
+  trigger       String
+  status        IngestionRunStatus @default(QUEUED)
+  scanned       Int                @default(0)
+  succeeded     Int                @default(0)
+  failed        Int                @default(0)
+  deleted       Int                @default(0)
+  cursor        Json               @default("{}") @map("cursor_json")
+  errorSummary  String?            @map("error_summary")
+  startedAt     DateTime?          @map("started_at")
+  finishedAt    DateTime?          @map("finished_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  searchIndex   SearchIndex        @relation(fields: [searchIndexId], references: [id], onDelete: Cascade)
+  generation    IndexGeneration?   @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  source        DataSource         @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  triggeredBy   User?              @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+  errors        IngestionError[]
+
+  @@index([searchIndexId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("ingestion_runs")
+}
+
+model IngestionError {
+  id                 String       @id @default(uuid()) @db.Uuid
+  runId              String       @map("run_id") @db.Uuid
+  sourceKey          String       @map("source_key")
+  code               String
+  sanitizedMessage   String       @map("sanitized_message")
+  retryCount         Int          @default(0) @map("retry_count")
+  payloadFingerprint String       @map("payload_fingerprint")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  run                IngestionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+  @@map("ingestion_errors")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  projectId   String?   @map("project_id") @db.Uuid
+  actorId     String    @map("actor_id") @db.Uuid
+  action      String
+  targetType  String    @map("target_type")
+  targetId    String    @map("target_id") @db.Uuid
+  metadata    Json      @default("{}") @map("metadata_json")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  actor       User      @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model PlatformSetting {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     Json     @map("value_json")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
